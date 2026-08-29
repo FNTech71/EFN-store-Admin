@@ -32,7 +32,7 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
           <input type="password" id="loginPassword" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="••••••••" />
         </div>
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition duration-200">
+        <button type="submit" id="loginSubmitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition duration-200">
           Sign In
         </button>
       </form>
@@ -181,7 +181,7 @@
     </main>
   </div>
 
-  <!-- Add/Edit Product Modal -->
+  <!-- Add Product Modal -->
   <div id="productModal" class="fixed inset-0 bg-black/50 hidden z-40 items-center justify-center p-4">
     <div class="bg-white rounded-xl max-w-lg w-full p-6 space-y-4 shadow-xl">
       <div class="flex justify-between items-center border-b pb-3">
@@ -216,9 +216,10 @@
     </div>
   </div>
 
-  <!-- Firebase & Admin Application Logic -->
+  <!-- Firebase & Admin Application Script -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
     import { 
       getAuth, 
       signInWithEmailAndPassword, 
@@ -230,32 +231,31 @@
       collection, 
       doc, 
       addDoc, 
-      setDoc, 
-      getDoc, 
       getDocs, 
       deleteDoc, 
       query, 
       orderBy, 
       serverTimestamp, 
-      updateDoc, 
-      Timestamp 
+      updateDoc 
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    // --- Firebase & Cloudinary Configuration ---
+    // Configuration Settings (Ella's Collections API Credentials)
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyB1y1vLNKvHpKeHNSlk3-B3-UkhNcHjoxk",
+      authDomain: "ella-s-collections.firebaseapp.com",
+      projectId: "ella-s-collections",
+      storageBucket: "ella-s-collections.firebasestorage.app",
+      messagingSenderId: "599668826794",
+      appId: "1:599668826794:web:9389e591e5c146c89fe6d3",
+      measurementId: "G-XSVD2BJCD7"
     };
 
     const CLOUD_NAME = "ibqeitty";
-    const UPLOAD_PRESET = "EFN Store"; // Ensure this preset is set to Unsigned in Cloudinary Console
+    const UPLOAD_PRESET = "EFN Store";
 
-    // --- State & App Initialization ---
+    // Application Initialization
     const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
@@ -263,7 +263,7 @@
     let allOrders = [];
     let messages = [];
 
-    // Authentication State Observer
+    // Realtime Firebase Authentication Listener
     onAuthStateChanged(auth, (user) => {
       if (user) {
         document.getElementById("loginSection").classList.add("hidden");
@@ -275,7 +275,37 @@
       }
     });
 
-    // --- Core Functions ---
+    // Auth Actions
+    window.handleLogin = async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById("loginSubmitBtn");
+      btn.innerText = "Signing in...";
+      btn.disabled = true;
+
+      const email = document.getElementById("loginEmail").value;
+      const pass = document.getElementById("loginPassword").value;
+
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+        showToast("Logged in successfully", true);
+      } catch (err) {
+        showToast("Login failed: " + err.message);
+      } finally {
+        btn.innerText = "Sign In";
+        btn.disabled = false;
+      }
+    };
+
+    window.handleLogout = async function() {
+      try {
+        await signOut(auth);
+        showToast("Logged out successfully", true);
+      } catch (err) {
+        showToast("Logout error: " + err.message);
+      }
+    };
+
+    // Data Loaders
     async function loadAll() {
       await Promise.all([loadProducts(), loadOrders(), loadMessages()]);
       updateStats();
@@ -298,7 +328,6 @@
         allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderOrders();
       } catch (e) {
-        // Fallback if index isn't created yet for ordering
         const snap = await getDocs(collection(db, "orders"));
         allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderOrders();
@@ -326,7 +355,7 @@
       document.getElementById("statMessages").innerText = messages.length;
     }
 
-    // --- Render Functions ---
+    // UI Renderers
     function renderProducts() {
       const tbody = document.getElementById("productsTableBody");
       tbody.innerHTML = products.map(p => `
@@ -335,7 +364,7 @@
           <td class="p-4 font-semibold text-gray-800">${p.name}</td>
           <td class="p-4">GH₵ ${Number(p.price).toFixed(2)}</td>
           <td class="p-4">${p.stock}</td>
-          <td class="p-4 text-right space-x-2">
+          <td class="p-4 text-right">
             <button onclick="deleteProduct('${p.id}')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
           </td>
         </tr>
@@ -380,24 +409,7 @@
       `).join('');
     }
 
-    // --- Action Handlers ---
-    window.handleLogin = async function(e) {
-      e.preventDefault();
-      const email = document.getElementById("loginEmail").value;
-      const pass = document.getElementById("loginPassword").value;
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-        showToast("Logged in successfully", true);
-      } catch (err) {
-        showToast("Login failed: " + err.message);
-      }
-    };
-
-    window.handleLogout = async function() {
-      await signOut(auth);
-      showToast("Logged out", true);
-    };
-
+    // Product & Order Operations
     window.handleProductSubmit = async function(e) {
       e.preventDefault();
       const btn = document.getElementById("saveProdBtn");
@@ -415,13 +427,13 @@
           const formData = new FormData();
           formData.append("file", imageFile);
           formData.append("upload_preset", UPLOAD_PRESET);
-          
+
           const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
             method: "POST",
             body: formData
           });
 
-          if (!uploadRes.ok) throw new Error("Cloudinary image upload failed.");
+          if (!uploadRes.ok) throw new Error("Cloudinary upload failed");
           const uploadData = await uploadRes.json();
           imageUrl = uploadData.secure_url;
         }
@@ -434,7 +446,7 @@
           createdAt: serverTimestamp()
         });
 
-        showToast("Product created!", true);
+        showToast("Product saved successfully!", true);
         toggleProductModal(false);
         document.getElementById("productForm").reset();
         await loadAll();
@@ -451,10 +463,8 @@
       if (!order) return;
 
       try {
-        // 1. Update order status
         await updateDoc(doc(db, "orders", id), { status: "done" });
 
-        // 2. Decrement product inventory stock
         if (order.items && Array.isArray(order.items)) {
           for (const item of order.items) {
             const prod = products.find(p => p.name === item.name || p.id === item.id);
@@ -468,7 +478,7 @@
         showToast("Order completed & inventory updated!", true);
         await loadAll();
       } catch (e) {
-        showToast("Error updating order: " + e.message);
+        showToast("Error completing order: " + e.message);
       }
     };
 
@@ -481,7 +491,7 @@
     };
 
     window.deleteOrder = async function(id) {
-      if (confirm("Delete this order entry?")) {
+      if (confirm("Delete this order?")) {
         await deleteDoc(doc(db, "orders", id));
         showToast("Order deleted", true);
         loadAll();
@@ -552,7 +562,7 @@
       showToast("PDF exported!", true);
     };
 
-    // --- Tab Switching & UI Helpers ---
+    // UI Helpers
     window.switchTab = function(tabName) {
       document.querySelectorAll('section[id^="view-"]').forEach(s => s.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(b => {
